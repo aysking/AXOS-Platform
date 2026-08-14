@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -27,18 +28,12 @@ import {
  * SALE TRANSACTIONS
  * ============================================================
  *
- * AXOS treats a sale transaction as one commercial object.
- *
- * transactionType distinguishes:
+ * One commercial transaction model supports:
  *
  *   secondary_market
  *   off_plan
  *
- * We intentionally do NOT create separate transaction tables
- * for secondary sales and off-plan sales.
- *
- * This keeps reporting, permissions, workflows and accounting
- * consistent.
+ * We intentionally do NOT create separate transaction tables.
  */
 
 export const saleTransactionType = pgEnum(
@@ -63,18 +58,6 @@ export const saleTransactionStatus = pgEnum(
   ],
 );
 
-/*
- * ============================================================
- * JURISDICTION
- * ============================================================
- *
- * The jurisdiction determines which document/workflow rules
- * may apply to a transaction.
- *
- * This is intentionally configurable through a finite enum
- * for Phase 1.
- */
-
 export const saleJurisdiction = pgEnum(
   "sale_jurisdiction",
   [
@@ -87,7 +70,101 @@ export const saleJurisdiction = pgEnum(
 
 /*
  * ============================================================
- * SALE TRANSACTIONS
+ * SALE TRANSACTION PARTY
+ * ============================================================
+ *
+ * A transaction can have multiple buyers and sellers.
+ *
+ * Examples:
+ *
+ *   buyer
+ *   co_buyer
+ *   seller
+ *   co_seller
+ *   representative
+ *   other
+ */
+
+export const salePartyType = pgEnum(
+  "sale_party_type",
+  [
+    "buyer",
+    "co_buyer",
+    "seller",
+    "co_seller",
+    "representative",
+    "other",
+  ],
+);
+
+export const saleTransactionParties = pgTable(
+  "sale_transaction_parties",
+  {
+    id: uuid("id")
+      .defaultRandom()
+      .primaryKey(),
+
+    saleTransactionId: uuid(
+      "sale_transaction_id",
+    )
+      .notNull()
+      .references(
+        () => saleTransactions.id,
+        {
+          onDelete: "cascade",
+        },
+      ),
+
+    partyType: salePartyType(
+      "party_type",
+    ).notNull(),
+
+    name: text("name").notNull(),
+
+    companyName: text(
+      "company_name",
+    ),
+
+    email: text("email"),
+
+    phone: text("phone"),
+
+    role: text("role"),
+
+    metadata: jsonb("metadata"),
+
+    createdAt: timestamp(
+      "created_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp(
+      "updated_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    transactionIdx: index(
+      "sale_transaction_parties_transaction_idx",
+    ).on(table.saleTransactionId),
+
+    partyTypeIdx: index(
+      "sale_transaction_parties_type_idx",
+    ).on(table.partyType),
+  }),
+);
+
+/*
+ * ============================================================
+ * SALE TRANSACTION
  * ============================================================
  */
 
@@ -102,15 +179,16 @@ export const saleTransactions = pgTable(
       "organization_id",
     )
       .notNull()
-      .references(() => organizations.id, {
-        onDelete: "cascade",
-      }),
+      .references(
+        () => organizations.id,
+        {
+          onDelete: "cascade",
+        },
+      ),
 
     /*
-     * Optional lead relationship.
-     *
-     * A transaction normally originates from a lead,
-     * but the database does not force that dependency.
+     * A sale can originate from a lead,
+     * but the relationship is intentionally optional.
      */
     leadId: uuid("lead_id").references(
       () => leads.id,
@@ -120,7 +198,7 @@ export const saleTransactions = pgTable(
     ),
 
     /*
-     * Broker/team member responsible for the transaction.
+     * AXOS broker/team member responsible.
      */
     assignedToMembershipId: uuid(
       "assigned_to_membership_id",
@@ -154,10 +232,11 @@ export const saleTransactions = pgTable(
      * PROPERTY / UNIT REFERENCE
      * ----------------------------------------------------------
      *
-     * These remain references only.
+     * These are reference relationships only.
      *
-     * The transaction can also contain external property/unit
-     * information when the asset does not exist in AXOS inventory.
+     * External references are supported because a broker may
+     * create a lead/transaction for an asset not yet present
+     * in AXOS inventory.
      */
 
     propertyId: uuid("property_id").references(
@@ -205,10 +284,9 @@ export const saleTransactions = pgTable(
       .default("AED"),
 
     /*
-     * Broker commission.
+     * Broker commission summary.
      *
-     * This is the brokerage-side commercial information.
-     * It does NOT represent developer/vendor accounting.
+     * Detailed commission records are stored separately below.
      */
 
     commissionType: text(
@@ -236,15 +314,15 @@ export const saleTransactions = pgTable(
      * VAT
      * ----------------------------------------------------------
      *
-     * VAT is represented at transaction level so that later
-     * invoice generation can use immutable transaction data.
+     * VAT is stored at transaction level so invoice generation
+     * can reconstruct the commercial transaction.
      */
 
-    vatApplicable: integer(
+    vatApplicable: boolean(
       "vat_applicable",
     )
       .notNull()
-      .default(0),
+      .default(false),
 
     vatRate: numeric(
       "vat_rate",
@@ -264,34 +342,13 @@ export const saleTransactions = pgTable(
 
     /*
      * ----------------------------------------------------------
-     * SECONDARY MARKET
-     * ----------------------------------------------------------
-     *
-     * Optional fields used when transactionType =
-     * secondary_market.
-     */
-
-    sellerName: text("seller_name"),
-
-    sellerContact: text(
-      "seller_contact",
-    ),
-
-    buyerName: text("buyer_name"),
-
-    buyerContact: text(
-      "buyer_contact",
-    ),
-
-    /*
-     * ----------------------------------------------------------
      * OFF-PLAN
      * ----------------------------------------------------------
      *
-     * These are intentionally limited.
+     * Phase 1 intentionally keeps this limited to information
+     * relevant to the broker.
      *
-     * AXOS does not track whether the buyer actually paid
-     * each installment.
+     * AXOS does NOT track buyer installment payments.
      */
 
     projectName: text("project_name"),
@@ -300,33 +357,21 @@ export const saleTransactions = pgTable(
       "developer_project_reference",
     ),
 
-    reservationAmount: numeric(
-      "reservation_amount",
-      {
-        precision: 18,
-        scale: 2,
-      },
-    ),
-
-    installmentPlan: jsonb(
-      "installment_plan",
-    ),
-
     brochureReference: text(
       "brochure_reference",
     ),
 
     /*
      * ----------------------------------------------------------
-     * DOCUMENT / WORKFLOW INFORMATION
+     * DOCUMENT / WORKFLOW
      * ----------------------------------------------------------
      */
 
-    spaRequired: integer(
+    spaRequired: boolean(
       "spa_required",
     )
       .notNull()
-      .default(0),
+      .default(false),
 
     notes: text("notes"),
 
@@ -366,8 +411,11 @@ export const saleTransactions = pgTable(
   },
   (table) => ({
     transactionNumberUnique: uniqueIndex(
-      "sale_transactions_number_unique",
-    ).on(table.transactionNumber),
+      "sale_transactions_organization_number_unique",
+    ).on(
+      table.organizationId,
+      table.transactionNumber,
+    ),
 
     organizationIdx: index(
       "sale_transactions_organization_idx",
@@ -406,5 +454,492 @@ export const saleTransactions = pgTable(
     createdAtIdx: index(
       "sale_transactions_created_at_idx",
     ).on(table.createdAt),
+  }),
+);
+
+/*
+ * ============================================================
+ * SALE OFFERS
+ * ============================================================
+ *
+ * An offer is a commercial event belonging to a sale
+ * transaction.
+ */
+
+export const saleOfferStatus = pgEnum(
+  "sale_offer_status",
+  [
+    "draft",
+    "submitted",
+    "accepted",
+    "rejected",
+    "withdrawn",
+    "expired",
+  ],
+);
+
+export const saleOffers = pgTable(
+  "sale_offers",
+  {
+    id: uuid("id")
+      .defaultRandom()
+      .primaryKey(),
+
+    saleTransactionId: uuid(
+      "sale_transaction_id",
+    )
+      .notNull()
+      .references(
+        () => saleTransactions.id,
+        {
+          onDelete: "cascade",
+        },
+      ),
+
+    offerNumber: text(
+      "offer_number",
+    ).notNull(),
+
+    offerAmount: numeric(
+      "offer_amount",
+      {
+        precision: 18,
+        scale: 2,
+      },
+    ).notNull(),
+
+    currency: text("currency")
+      .notNull()
+      .default("AED"),
+
+    validUntil: timestamp(
+      "valid_until",
+      {
+        withTimezone: true,
+      },
+    ),
+
+    status: saleOfferStatus(
+      "status",
+    )
+      .notNull()
+      .default("draft"),
+
+    terms: text("terms"),
+
+    metadata: jsonb("metadata"),
+
+    createdByMembershipId: uuid(
+      "created_by_membership_id",
+    )
+      .notNull()
+      .references(
+        () => memberships.id,
+        {
+          onDelete: "restrict",
+        },
+      ),
+
+    createdAt: timestamp(
+      "created_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp(
+      "updated_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    offerNumberUnique: uniqueIndex(
+      "sale_offers_organization_number_unique",
+    ).on(
+      table.saleTransactionId,
+      table.offerNumber,
+    ),
+
+    transactionIdx: index(
+      "sale_offers_transaction_idx",
+    ).on(table.saleTransactionId),
+
+    statusIdx: index(
+      "sale_offers_status_idx",
+    ).on(table.status),
+  }),
+);
+
+/*
+ * ============================================================
+ * SALE RESERVATIONS
+ * ============================================================
+ *
+ * Used primarily for off-plan transactions.
+ *
+ * This records the commercial reservation information.
+ * It does NOT track whether payment was actually received.
+ */
+
+export const saleReservationStatus = pgEnum(
+  "sale_reservation_status",
+  [
+    "draft",
+    "issued",
+    "accepted",
+    "cancelled",
+    "expired",
+  ],
+);
+
+export const saleReservations = pgTable(
+  "sale_reservations",
+  {
+    id: uuid("id")
+      .defaultRandom()
+      .primaryKey(),
+
+    saleTransactionId: uuid(
+      "sale_transaction_id",
+    )
+      .notNull()
+      .references(
+        () => saleTransactions.id,
+        {
+          onDelete: "cascade",
+        },
+      ),
+
+    reservationNumber: text(
+      "reservation_number",
+    ).notNull(),
+
+    reservationAmount: numeric(
+      "reservation_amount",
+      {
+        precision: 18,
+        scale: 2,
+      },
+    ),
+
+    currency: text("currency")
+      .notNull()
+      .default("AED"),
+
+    reservationDate: timestamp(
+      "reservation_date",
+      {
+        withTimezone: true,
+      },
+    ),
+
+    status: saleReservationStatus(
+      "status",
+    )
+      .notNull()
+      .default("draft"),
+
+    notes: text("notes"),
+
+    metadata: jsonb("metadata"),
+
+    createdByMembershipId: uuid(
+      "created_by_membership_id",
+    )
+      .notNull()
+      .references(
+        () => memberships.id,
+        {
+          onDelete: "restrict",
+        },
+      ),
+
+    createdAt: timestamp(
+      "created_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp(
+      "updated_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    reservationNumberUnique: uniqueIndex(
+      "sale_reservations_transaction_number_unique",
+    ).on(
+      table.saleTransactionId,
+      table.reservationNumber,
+    ),
+
+    transactionIdx: index(
+      "sale_reservations_transaction_idx",
+    ).on(table.saleTransactionId),
+
+    statusIdx: index(
+      "sale_reservations_status_idx",
+    ).on(table.status),
+  }),
+);
+
+/*
+ * ============================================================
+ * SALE INSTALLMENTS
+ * ============================================================
+ *
+ * Commercial installment schedule only.
+ *
+ * IMPORTANT:
+ *
+ * This table does NOT contain:
+ *
+ *   payment_received
+ *   payment_received_at
+ *   payment_status
+ *   bank_reference
+ *
+ * Those belong to future accounting/payment functionality.
+ */
+
+export const saleInstallments = pgTable(
+  "sale_installments",
+  {
+    id: uuid("id")
+      .defaultRandom()
+      .primaryKey(),
+
+    saleTransactionId: uuid(
+      "sale_transaction_id",
+    )
+      .notNull()
+      .references(
+        () => saleTransactions.id,
+        {
+          onDelete: "cascade",
+        },
+      ),
+
+    sequence: integer(
+      "sequence",
+    ).notNull(),
+
+    description: text(
+      "description",
+    ).notNull(),
+
+    milestone: text("milestone"),
+
+    percentage: numeric(
+      "percentage",
+      {
+        precision: 8,
+        scale: 4,
+      },
+    ),
+
+    amount: numeric(
+      "amount",
+      {
+        precision: 18,
+        scale: 2,
+      },
+    ),
+
+    currency: text("currency")
+      .notNull()
+      .default("AED"),
+
+    dueDate: timestamp(
+      "due_date",
+      {
+        withTimezone: true,
+      },
+    ),
+
+    createdAt: timestamp(
+      "created_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp(
+      "updated_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    transactionSequenceUnique: uniqueIndex(
+      "sale_installments_transaction_sequence_unique",
+    ).on(
+      table.saleTransactionId,
+      table.sequence,
+    ),
+
+    transactionIdx: index(
+      "sale_installments_transaction_idx",
+    ).on(table.saleTransactionId),
+
+    dueDateIdx: index(
+      "sale_installments_due_date_idx",
+    ).on(table.dueDate),
+  }),
+);
+
+/*
+ * ============================================================
+ * SALE COMMISSIONS
+ * ============================================================
+ *
+ * Broker-side commission records.
+ *
+ * Phase 1 does not attempt to become a complete accounting
+ * ledger.
+ */
+
+export const saleCommissionStatus = pgEnum(
+  "sale_commission_status",
+  [
+    "draft",
+    "approved",
+    "cancelled",
+  ],
+);
+
+export const saleCommissions = pgTable(
+  "sale_commissions",
+  {
+    id: uuid("id")
+      .defaultRandom()
+      .primaryKey(),
+
+    saleTransactionId: uuid(
+      "sale_transaction_id",
+    )
+      .notNull()
+      .references(
+        () => saleTransactions.id,
+        {
+          onDelete: "cascade",
+        },
+      ),
+
+    membershipId: uuid(
+      "membership_id",
+    ).references(
+      () => memberships.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+
+    description: text(
+      "description",
+    ),
+
+    commissionType: text(
+      "commission_type",
+    ),
+
+    rate: numeric(
+      "rate",
+      {
+        precision: 8,
+        scale: 4,
+      },
+    ),
+
+    amount: numeric(
+      "amount",
+      {
+        precision: 18,
+        scale: 2,
+      },
+    ),
+
+    currency: text("currency")
+      .notNull()
+      .default("AED"),
+
+    vatApplicable: boolean(
+      "vat_applicable",
+    )
+      .notNull()
+      .default(false),
+
+    vatRate: numeric(
+      "vat_rate",
+      {
+        precision: 8,
+        scale: 4,
+      },
+    ),
+
+    vatAmount: numeric(
+      "vat_amount",
+      {
+        precision: 18,
+        scale: 2,
+      },
+    ),
+
+    status: saleCommissionStatus(
+      "status",
+    )
+      .notNull()
+      .default("draft"),
+
+    metadata: jsonb("metadata"),
+
+    createdAt: timestamp(
+      "created_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp(
+      "updated_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    transactionIdx: index(
+      "sale_commissions_transaction_idx",
+    ).on(table.saleTransactionId),
+
+    membershipIdx: index(
+      "sale_commissions_membership_idx",
+    ).on(table.membershipId),
+
+    statusIdx: index(
+      "sale_commissions_status_idx",
+    ).on(table.status),
   }),
 );

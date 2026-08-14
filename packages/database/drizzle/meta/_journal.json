@@ -22,6 +22,13 @@
       "when": 1786737648498,
       "tag": "0002_bouncy_silver_samurai",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786738539544,
+      "tag": "0003_strange_stepford_cuckoos",
+      "breakpoints": true
     }
   ]
 }

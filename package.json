@@ -1,0 +1,18 @@
+{
+  "name": "axos-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AXOS SaaS Platform",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=@axos/api",
+    "dev:web": "npm run dev --workspace=@axos/web",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  }
+}

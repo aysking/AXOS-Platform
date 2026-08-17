@@ -4,12 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "npm run build --workspace=@axos/database",
     "dev": "tsx watch src/server.ts",
+    "prebuild": "npm run build --workspace=@axos/database",
     "build": "tsc",
+    "pretypecheck": "npm run build --workspace=@axos/database",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@axos/database": "*",
     "@fastify/cors": "^11.0.0",
     "dotenv": "^17.0.0",
     "fastify": "^5.0.0",

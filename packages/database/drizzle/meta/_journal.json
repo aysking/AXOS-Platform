@@ -15,6 +15,41 @@
       "when": 1786733457358,
       "tag": "0001_spotty_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786737648498,
+      "tag": "0002_bouncy_silver_samurai",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786738539544,
+      "tag": "0003_strange_stepford_cuckoos",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786741408210,
+      "tag": "0004_open_khan",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786979094474,
+      "tag": "0005_purple_iron_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786980312474,
+      "tag": "0006_broad_giant_girl",
+      "breakpoints": true
     }
   ]
 }

@@ -1,35 +1,84 @@
-import Fastify from "fastify";
-import cors from "@fastify/cors";
-import dotenv from "dotenv";
+import {
+  checkDatabaseConnection,
+  createDatabase,
+} from "@axos/database";
 
-dotenv.config();
+import { buildApp } from "./app.js";
+import { env } from "./config/env.js";
 
-const app = Fastify({
-  logger: true,
+const database = createDatabase(
+  env.DATABASE_URL,
+  {
+    maxConnections:
+      env.DB_MAX_CONNECTIONS,
+  },
+);
+
+const app = await buildApp({
+  database,
 });
 
-await app.register(cors, {
-  origin: true,
-});
+async function start() {
+  try {
+    /*
+     * Fail startup if the database cannot
+     * be reached.
+     */
+    await checkDatabaseConnection(
+      database,
+    );
 
-app.get("/health", async () => {
-  return {
-    status: "ok",
-    service: "axos-api",
-    environment: process.env.NODE_ENV ?? "development",
-  };
-});
+    await app.listen({
+      port: env.API_PORT,
+      host: "0.0.0.0",
+    });
 
-const port = Number(process.env.API_PORT ?? 3000);
+    app.log.info(
+      `AXOS API running on http://localhost:${env.API_PORT}`,
+    );
+  } catch (error) {
+    app.log.error(
+      error,
+      "Failed to start AXOS API",
+    );
 
-try {
-  await app.listen({
-    port,
-    host: "0.0.0.0",
-  });
+    await database.close();
 
-  console.log(`AXOS API running on http://localhost:${port}`);
-} catch (error) {
-  app.log.error(error);
-  process.exit(1);
+    process.exit(1);
+  }
 }
+
+async function shutdown(
+  signal: string,
+) {
+  app.log.info(
+    { signal },
+    "Shutting down AXOS API",
+  );
+
+  try {
+    await app.close();
+    await database.close();
+
+    process.exit(0);
+  } catch (error) {
+    app.log.error(
+      error,
+      "Error during shutdown",
+    );
+
+    process.exit(1);
+  }
+}
+
+process.on(
+  "SIGINT",
+  () => void shutdown("SIGINT"),
+);
+
+process.on(
+  "SIGTERM",
+  () => void shutdown("SIGTERM"),
+);
+
+await start();

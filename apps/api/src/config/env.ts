@@ -69,6 +69,12 @@ const envSchema = z.object({
     .min(1)
     .max(100)
     .default(10),
+
+  DEV_MEMBERSHIP_ID: z
+  .string()
+  .uuid()
+  .optional(),
+  
 });
 
 const result = envSchema.safeParse(
@@ -90,3 +96,4 @@ if (!result.success) {
 }
 
 export const env = result.data;
+

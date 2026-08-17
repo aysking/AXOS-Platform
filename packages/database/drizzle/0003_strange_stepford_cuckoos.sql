@@ -77,8 +77,12 @@ CREATE TABLE "sale_transaction_parties" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "sale_transactions" ALTER COLUMN "vat_applicable" SET DATA TYPE boolean;--> statement-breakpoint
-ALTER TABLE "sale_transactions" ALTER COLUMN "spa_required" SET DATA TYPE boolean;--> statement-breakpoint
+ALTER TABLE "sale_transactions" ALTER COLUMN "vat_applicable" DROP DEFAULT;--> statement-breakpoint
+ALTER TABLE "sale_transactions" ALTER COLUMN "vat_applicable" SET DATA TYPE boolean USING ("vat_applicable" <> 0);--> statement-breakpoint
+ALTER TABLE "sale_transactions" ALTER COLUMN "vat_applicable" SET DEFAULT false;--> statement-breakpoint
+ALTER TABLE "sale_transactions" ALTER COLUMN "spa_required" DROP DEFAULT;--> statement-breakpoint
+ALTER TABLE "sale_transactions" ALTER COLUMN "spa_required" SET DATA TYPE boolean USING ("spa_required" <> 0);--> statement-breakpoint
+ALTER TABLE "sale_transactions" ALTER COLUMN "spa_required" SET DEFAULT false;--> statement-breakpoint
 ALTER TABLE "sale_commissions" ADD CONSTRAINT "sale_commissions_sale_transaction_id_sale_transactions_id_fk" FOREIGN KEY ("sale_transaction_id") REFERENCES "public"."sale_transactions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sale_commissions" ADD CONSTRAINT "sale_commissions_membership_id_memberships_id_fk" FOREIGN KEY ("membership_id") REFERENCES "public"."memberships"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sale_installments" ADD CONSTRAINT "sale_installments_sale_transaction_id_sale_transactions_id_fk" FOREIGN KEY ("sale_transaction_id") REFERENCES "public"."sale_transactions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

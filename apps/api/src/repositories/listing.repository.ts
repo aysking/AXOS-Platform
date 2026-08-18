@@ -23,6 +23,68 @@ export class ListingRepository {
       DatabaseConnection,
   ) {}
 
+  async findPropertyFinderListingByExternalId(
+    organizationId: string,
+    externalId: string,
+  ) {
+    const [listing] =
+      await this.database.db
+        .select()
+        .from(listings)
+        .where(
+          and(
+            eq(
+              listings.organizationId,
+              organizationId,
+            ),
+
+            eq(
+              listings.provider,
+              "property_finder",
+            ),
+
+            eq(
+              listings.externalId,
+              externalId,
+            ),
+          ),
+        )
+        .limit(1);
+
+    return listing ?? null;
+  }
+
+  async findPropertyFinderListingByReference(
+    organizationId: string,
+    reference: string,
+  ) {
+    const [listing] =
+      await this.database.db
+        .select()
+        .from(listings)
+        .where(
+          and(
+            eq(
+              listings.organizationId,
+              organizationId,
+            ),
+
+            eq(
+              listings.provider,
+              "property_finder",
+            ),
+
+            eq(
+              listings.reference,
+              reference,
+            ),
+          ),
+        )
+        .limit(1);
+
+    return listing ?? null;
+  }
+
   async upsertPropertyFinderListing(
     organizationId: string,
     input:

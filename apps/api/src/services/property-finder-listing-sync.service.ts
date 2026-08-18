@@ -59,11 +59,18 @@ export class PropertyFinderListingSyncService {
             item,
           );
 
+        const listing =
+          await this.repository
+            .upsertPropertyFinderListing(
+              organizationId,
+              mapped,
+              syncStartedAt,
+            );
+
         await this.repository
-          .upsertPropertyFinderListing(
+          .reconcilePropertyFinderListingLinks(
             organizationId,
-            mapped,
-            syncStartedAt,
+            listing,
           );
 
         listingsProcessed += 1;

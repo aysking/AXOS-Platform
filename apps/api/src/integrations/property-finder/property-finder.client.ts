@@ -8,7 +8,7 @@ import type {
   PropertyFinderListingSearchResponse,
   PropertyFinderWebhookListResponse,
   PropertyFinderWebhookSubscription,
-  PropertyFinderLeadWebhookEventType,
+  PropertyFinderWebhookEventType,
 } from "./property-finder.types.js";
 
 export interface PropertyFinderClientConfig {
@@ -143,12 +143,12 @@ export class PropertyFinderClient {
     );
   }
 
-  async subscribeWebhook(
-    eventId:
-      PropertyFinderLeadWebhookEventType,
-    callbackUrl: string,
-    secret: string,
-  ) {
+    async subscribeWebhook(
+      eventId:
+        PropertyFinderWebhookEventType,
+      callbackUrl: string,
+      secret: string,
+    ) {
     return this.authorizedPost<
       PropertyFinderWebhookSubscription
     >(

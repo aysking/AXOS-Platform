@@ -38,6 +38,10 @@ import {
   PropertyFinderWebhookSubscriptionService,
 } from "../services/property-finder-webhook-subscription.service.js";
 
+import {
+  PropertyFinderListingResolverService,
+} from "../services/property-finder-listing-resolver.service.js";
+
 export interface PropertyFinderRouteOptions {
   database:
     DatabaseConnection;
@@ -72,6 +76,12 @@ export const propertyFinderRoutes:
         options.database,
       );
 
+    const listingResolver =
+      new PropertyFinderListingResolverService(
+        client,
+        repository,
+      );
+
     const syncService =
       new PropertyFinderListingSyncService(
         client,
@@ -87,6 +97,7 @@ export const propertyFinderRoutes:
       new PropertyFinderLeadSyncService(
         client,
         leadRepository,
+        listingResolver,
       );
 
     const webhookSubscriptionService =
@@ -261,11 +272,11 @@ export const propertyFinderRoutes:
         return {
           data:
             await webhookSubscriptionService
-              .ensureLeadSubscriptions(
-                context.organizationId,
-                publicBaseUrl,
-                webhookSecretSeed,
-              ),
+            .ensureSubscriptions(
+              context.organizationId,
+              publicBaseUrl,
+              webhookSecretSeed,
+            )
         };
       },
     );

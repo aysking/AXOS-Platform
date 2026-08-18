@@ -976,6 +976,53 @@ export class PropertyFinderLeadRepository {
               },
             });
 
+          /*
+          * --------------------------------------------------
+          * EXISTING INQUIRY LAST ACTIVITY
+          * --------------------------------------------------
+          *
+          * An existing inquiry may be refreshed by polling
+          * after first arriving through a webhook.
+          *
+          * If Property Finder supplies a newer authoritative
+          * activity timestamp, never leave the AXOS Lead's
+          * last_activity_at behind it.
+          */
+
+          if (
+            input.providerCreatedAt
+          ) {
+            const providerActivityAt =
+              input.providerCreatedAt
+                .toISOString();
+
+            await tx
+              .update(leads)
+              .set({
+                lastActivityAt:
+                  sql`GREATEST(
+                    ${leads.lastActivityAt},
+                    ${providerActivityAt}::timestamptz
+                  )`,
+
+                updatedAt:
+                  now,
+              })
+              .where(
+                and(
+                  eq(
+                    leads.id,
+                    existingInquiry.leadId,
+                  ),
+
+                  eq(
+                    leads.organizationId,
+                    organizationId,
+                  ),
+                ),
+              );
+          }
+
           return {
             externalInquiryId:
               input.externalInquiryId,

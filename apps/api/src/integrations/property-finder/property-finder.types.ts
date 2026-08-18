@@ -415,6 +415,14 @@ export type PropertyFinderListingWebhookEventType =
   | "listing.published"
   | "listing.unpublished";
 
+export type PropertyFinderWebhookEventType =
+  | PropertyFinderLeadWebhookEventType
+  | PropertyFinderListingWebhookEventType;
+
+export type PropertyFinderWebhookEvent =
+  | PropertyFinderLeadWebhookEvent
+  | PropertyFinderListingWebhookEvent;
+
 export interface PropertyFinderListingWebhookEvent {
   id: string;
 

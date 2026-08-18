@@ -3,7 +3,7 @@ import type {
 } from "../integrations/property-finder/property-finder.client.js";
 
 import type {
-  PropertyFinderLeadWebhookEventType,
+  PropertyFinderWebhookEventType,
 } from "../integrations/property-finder/property-finder.types.js";
 
 import {
@@ -14,12 +14,15 @@ import {
   AppError,
 } from "../errors/app-error.js";
 
-const requiredLeadEvents:
-  PropertyFinderLeadWebhookEventType[] =
+const requiredEvents:
+  PropertyFinderWebhookEventType[] =
   [
     "lead.created",
     "lead.updated",
     "lead.assigned",
+
+    "listing.published",
+    "listing.unpublished",
   ];
 
 export class PropertyFinderWebhookSubscriptionService {
@@ -28,7 +31,7 @@ export class PropertyFinderWebhookSubscriptionService {
       PropertyFinderClient,
   ) {}
 
-  async ensureLeadSubscriptions(
+  async ensureSubscriptions(
     organizationId:
       string,
 
@@ -69,8 +72,8 @@ export class PropertyFinderWebhookSubscriptionService {
       string[] = [];
 
     for (
-      const eventId of
-        requiredLeadEvents
+    const eventId of
+      requiredEvents
     ) {
       const found =
         existing.some(
@@ -161,7 +164,7 @@ export class PropertyFinderWebhookSubscriptionService {
       alreadyPresent,
 
       requiredEvents:
-        requiredLeadEvents,
+        requiredEvents,
     };
   }
 }

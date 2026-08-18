@@ -10,6 +10,10 @@ import type {
   PropertyFinderLeadRepository,
 } from "../repositories/property-finder-lead.repository.js";
 
+import type {
+  PropertyFinderListingResolverService,
+} from "./property-finder-listing-resolver.service.js";
+
 export interface PropertyFinderLeadSyncOptions {
   lookbackDays?: number;
 }
@@ -21,6 +25,9 @@ export class PropertyFinderLeadSyncService {
 
     private readonly repository:
       PropertyFinderLeadRepository,
+
+    private readonly listingResolver:
+      PropertyFinderListingResolverService,
   ) {}
 
   async sync(
@@ -114,15 +121,33 @@ export class PropertyFinderLeadSyncService {
 
         const mapped =
           mapPropertyFinderLead(
-            item,
-          );
-
-        const result =
-          await this.repository
-            .importLead(
-              organizationId,
-              mapped,
+              item,
             );
+
+          /*
+          * Ensure the referenced listing exists locally
+          * before the Lead importer attempts to link it.
+          */
+          if (
+            mapped.externalListingId ||
+            mapped.externalListingReference
+          ) {
+            await this.listingResolver
+              .resolveForLead(
+                organizationId,
+
+                mapped.externalListingId,
+
+                mapped.externalListingReference,
+              );
+          }
+
+          const result =
+            await this.repository
+              .importLead(
+                organizationId,
+                mapped,
+              );
 
         if (
           result.inquiryCreated

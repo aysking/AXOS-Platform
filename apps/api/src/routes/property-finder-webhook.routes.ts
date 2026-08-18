@@ -19,8 +19,13 @@ import {
 } from "../errors/app-error.js";
 
 import type {
+  PropertyFinderWebhookEvent,
   PropertyFinderLeadWebhookEvent,
 } from "../integrations/property-finder/property-finder.types.js";
+
+import {
+  PropertyFinderListingWebhookService,
+} from "../services/property-finder-listing-webhook.service.js";
 
 import {
   derivePropertyFinderWebhookSecret,
@@ -36,9 +41,20 @@ import {
 } from "../repositories/property-finder-lead.repository.js";
 
 import {
-  createHash,
-  createHmac,
-} from "node:crypto";
+  PropertyFinderClient,
+} from "../integrations/property-finder/property-finder.client.js";
+
+import {
+  ListingRepository,
+} from "../repositories/listing.repository.js";
+
+import {
+  PropertyFinderListingResolverService,
+} from "../services/property-finder-listing-resolver.service.js";
+
+import {
+  IntegrationWebhookEventRepository,
+} from "../repositories/integration-webhook-event.repository.js";
 
 export interface PropertyFinderWebhookRouteOptions {
   database:
@@ -48,11 +64,39 @@ export interface PropertyFinderWebhookRouteOptions {
 const organizationIdSchema =
   z.string().uuid();
 
+
+function getWebhookErrorMessage(
+  error: unknown,
+): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Unknown webhook processing error";
+}
+
+function isPropertyFinderLeadWebhookEvent(
+  event:
+    PropertyFinderWebhookEvent,
+): event is PropertyFinderLeadWebhookEvent {
+  return (
+    event.type ===
+      "lead.created" ||
+    event.type ===
+      "lead.updated" ||
+    event.type ===
+      "lead.assigned"
+  );
+}
+
 const supportedEvents =
-  new Set([
+  new Set<string>([
     "lead.created",
     "lead.updated",
     "lead.assigned",
+
+    "listing.published",
+    "listing.unpublished",
   ]);
 
 export const propertyFinderWebhookRoutes:
@@ -68,13 +112,42 @@ export const propertyFinderWebhookRoutes:
         options.database,
       );
 
+    const propertyFinderClient =
+      new PropertyFinderClient({
+        baseUrl:
+          env.PROPERTY_FINDER_BASE_URL,
+
+        apiKey:
+          env.PROPERTY_FINDER_API_KEY,
+
+        apiSecret:
+          env.PROPERTY_FINDER_API_SECRET,
+      });
+
+    const listingRepository =
+      new ListingRepository(
+        options.database,
+      );
+    
+    const listingWebhookService =
+      new PropertyFinderListingWebhookService(
+        propertyFinderClient,
+        listingRepository,
+      );
+
+    const listingResolver =
+      new PropertyFinderListingResolverService(
+        propertyFinderClient,
+        listingRepository,
+      );
+
     app.post<{
       Params: {
         organizationId: string;
       };
 
       Body:
-        PropertyFinderLeadWebhookEvent;
+        PropertyFinderWebhookEvent;
     }>(
       "/webhooks/property-finder/:organizationId",
       {
@@ -183,27 +256,7 @@ export const propertyFinderWebhookRoutes:
             organizationId,
           );
         
-        const secretFingerprint =
-          createHash("sha256")
-            .update(
-              secret,
-              "utf8",
-            )
-            .digest("hex")
-            .slice(0, 12);
-
-        const expectedSignaturePrefix =
-          createHmac(
-            "sha256",
-            secret,
-          )
-            .update(
-              rawBody,
-              "utf8",
-            )
-            .digest("hex")
-            .slice(0, 12);
-
+        
         const receivedSignature =
           request.headers[
             "x-signature"
@@ -211,30 +264,11 @@ export const propertyFinderWebhookRoutes:
 
         request.log.info(
           {
-            secretSeedLength:
-              secretSeed.length,
-
-            derivedSecretLength:
-              secret.length,
-
-            secretFingerprint,
-
             rawBodyLength:
               Buffer.byteLength(
                 rawBody,
                 "utf8",
               ),
-
-            expectedSignaturePrefix,
-
-            receivedSignaturePrefix:
-              typeof receivedSignature ===
-              "string"
-                ? receivedSignature.slice(
-                    0,
-                    12,
-                  )
-                : null,
           },
           "Property Finder HMAC comparison",
         );
@@ -348,90 +382,306 @@ export const propertyFinderWebhookRoutes:
             .send();
         }
 
-        if (
-          event.entity?.type !==
-          "lead"
-        ) {
-          throw new AppError(
-            "Property Finder webhook entity is not a Lead",
-            {
-              statusCode:
-                400,
-
-              code:
-                "INVALID_PROPERTY_FINDER_WEBHOOK_ENTITY",
-            },
+        const webhookEventRepository =
+          new IntegrationWebhookEventRepository(
+            options.database,
           );
-        }
 
         /*
-         * ----------------------------------------------------
-         * REUSE EXISTING IMPORT PIPELINE
-         * ----------------------------------------------------
-         */
+        * ----------------------------------------------------
+        * DURABLE WEBHOOK EVENT CLAIM
+        * ----------------------------------------------------
+        *
+        * Authentication has already succeeded.
+        *
+        * We now persist/claim the Property Finder event ID
+        * before any business processing occurs.
+        */
 
-        const mapped =
-          mapPropertyFinderLeadWebhook(
-            event,
-          );
+        const parsedOccurredAt =
+          event.timestamp
+            ? new Date(
+                event.timestamp,
+              )
+            : null;
 
-        const result =
-          await repository
-            .importLead(
-              organizationId,
-              mapped,
-            );
+        const occurredAt =
+          parsedOccurredAt &&
+          !Number.isNaN(
+            parsedOccurredAt.getTime(),
+          )
+            ? parsedOccurredAt
+            : null;
 
-        request.log.info(
-          {
+        const claim =
+          await webhookEventRepository.claim({
             organizationId,
 
-            eventId:
+            provider:
+              "property_finder",
+
+            externalEventId:
               event.id,
 
             eventType:
               event.type,
 
-            externalInquiryId:
-              mapped
-                .externalInquiryId,
+            externalEntityId:
+              event.entity?.id ??
+              null,
 
-            leadId:
-              result.leadId,
+            externalEntityType:
+              event.entity?.type ??
+              null,
 
-            inquiryCreated:
-              result.inquiryCreated,
-
-            inquiryUpdated:
-              result.inquiryUpdated,
-
-            leadCreated:
-              result.leadCreated,
-          },
-          "Property Finder webhook processed",
-        );
-
-        return reply
-          .code(200)
-          .send({
-            received:
+            signatureVerified:
               true,
 
-            eventId:
-              event.id,
+            occurredAt,
 
-            externalInquiryId:
-              mapped
-                .externalInquiryId,
-
-            inquiryCreated:
-              result
-                .inquiryCreated,
-
-            inquiryUpdated:
-              result
-                .inquiryUpdated,
+            payload:
+              event,
           });
+
+        if (!claim.claimed) {
+          request.log.info(
+            {
+              organizationId,
+
+              eventId:
+                event.id,
+
+              eventType:
+                event.type,
+
+              inboxEventId:
+                claim.eventId,
+
+              processingStatus:
+                claim.processingStatus,
+
+              attempts:
+                claim.attempts,
+            },
+            "Ignored duplicate Property Finder webhook delivery",
+          );
+
+          return reply
+            .code(200)
+            .send({
+              received:
+                true,
+
+              duplicate:
+                true,
+
+              eventId:
+                event.id,
+
+              processingStatus:
+                claim.processingStatus,
+            });
+        }
+
+        try {
+          /*
+           * LISTING WEBHOOK
+           */
+          if (
+            event.type ===
+              "listing.published" ||
+            event.type ===
+              "listing.unpublished"
+          ) {
+            const result =
+              await listingWebhookService
+                .process(
+                  organizationId,
+                  event,
+                );
+
+            await webhookEventRepository
+              .markProcessed(
+                claim.eventId,
+              );
+
+            return reply
+              .code(200)
+              .send({
+                received:
+                  true,
+
+                eventId:
+                  event.id,
+
+                eventType:
+                  event.type,
+
+                externalListingId:
+                  result.externalListingId,
+
+                listingId:
+                  result.listingId,
+
+                action:
+                  result.action,
+
+                inquiriesReconciled:
+                  result.inquiriesReconciled,
+              });
+          }
+
+          /*
+           * LEAD TYPE GUARD
+           */
+          if (
+            !isPropertyFinderLeadWebhookEvent(
+              event,
+            )
+          ) {
+            await webhookEventRepository
+              .markIgnored(
+                claim.eventId,
+              );
+
+            return reply
+              .code(204)
+              .send();
+          }
+
+          /*
+           * LEAD ENTITY VALIDATION
+           */
+          if (
+            event.entity?.type !==
+            "lead"
+          ) {
+            throw new AppError(
+              "Property Finder webhook entity is not a Lead",
+              {
+                statusCode:
+                  400,
+
+                code:
+                  "INVALID_PROPERTY_FINDER_WEBHOOK_ENTITY",
+              },
+            );
+          }
+
+          /*
+           * Your existing mapper,
+           * listing resolver and importLead
+           * code stays here.
+           */
+
+          const mapped =
+            mapPropertyFinderLeadWebhook(
+              event,
+            );
+
+          /*
+           * KEEP YOUR EXISTING
+           * listingResolver.resolve(...)
+           * call here.
+           */
+
+          const result =
+            await repository
+              .importLead(
+                organizationId,
+                mapped,
+              );
+
+          await webhookEventRepository
+            .markProcessed(
+              claim.eventId,
+            );
+
+          /*
+           * KEEP YOUR EXISTING LOGGING
+           */
+
+          return reply
+            .code(200)
+            .send({
+              received:
+                true,
+
+              eventId:
+                event.id,
+
+              externalInquiryId:
+                mapped.externalInquiryId,
+
+              inquiryCreated:
+                result.inquiryCreated,
+
+              inquiryUpdated:
+                result.inquiryUpdated,
+            });
+        }
+        catch (error) {
+          const errorMessage =
+            getWebhookErrorMessage(
+              error,
+            );
+
+          try {
+            await webhookEventRepository
+              .markFailed(
+                claim.eventId,
+                errorMessage,
+              );
+          }
+          catch (
+            markFailedError
+          ) {
+            request.log.error(
+              {
+                organizationId,
+
+                eventId:
+                  event.id,
+
+                eventType:
+                  event.type,
+
+                inboxEventId:
+                  claim.eventId,
+
+                error:
+                  getWebhookErrorMessage(
+                    markFailedError,
+                  ),
+              },
+              "Unable to mark Property Finder webhook event as failed",
+            );
+          }
+
+          request.log.error(
+            {
+              organizationId,
+
+              eventId:
+                event.id,
+
+              eventType:
+                event.type,
+
+              inboxEventId:
+                claim.eventId,
+
+              attempts:
+                claim.attempts,
+
+              error:
+                errorMessage,
+            },
+            "Property Finder webhook processing failed",
+          );
+
+          throw error;
+        }
       },
     );
   };

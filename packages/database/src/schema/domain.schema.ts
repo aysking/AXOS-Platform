@@ -15,6 +15,11 @@ import {
   organizations,
 } from "./foundation.schema.js";
 
+import {
+  statusDefinitions,
+  timelineResponseDefinitions,
+} from "./configuration.schema.js";
+
 /*
  * ============================================================
  * LEAD
@@ -92,10 +97,25 @@ export const leads = pgTable(
 
     leadType: leadType("lead_type")
       .notNull(),
-
+    
     status: leadStatus("status")
       .notNull()
       .default("new"),
+
+    /*
+    * Transitional field.
+    *
+    * This will replace the legacy PostgreSQL lead_status
+    * enum after existing data and API logic have migrated.
+    */
+    statusDefinitionId: uuid(
+      "status_definition_id",
+    ).references(
+      () => statusDefinitions.id,
+      {
+        onDelete: "restrict",
+      },
+    ),
 
     source: leadSource("source"),
 
@@ -117,9 +137,51 @@ export const leads = pgTable(
       .defaultNow()
       .notNull(),
 
+    /*
+    * ==========================================================
+    * LEAD ACTION / FOLLOW-UP
+    * ==========================================================
+    */
+
     closedAt: timestamp("closed_at", {
       withTimezone: true,
     }),
+
+    nextActionAt: timestamp(
+      "next_action_at",
+      {
+        withTimezone: true,
+      },
+    ),
+
+    nextActionDescription: text(
+      "next_action_description",
+    ),
+
+    nextActionByMembershipId: uuid(
+      "next_action_by_membership_id",
+    ).references(
+      () => memberships.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+
+    nextActionCompletedAt: timestamp(
+      "next_action_completed_at",
+      {
+        withTimezone: true,
+      },
+    ),
+
+    lastActivityAt: timestamp(
+      "last_activity_at",
+      {
+        withTimezone: true,
+      },
+    )
+      .defaultNow()
+      .notNull(),
 
     archivedAt: timestamp("archived_at", {
     withTimezone: true,
@@ -165,6 +227,33 @@ export const leads = pgTable(
     ).on(
       table.organizationId,
       table.archivedAt,
+    ),
+    statusDefinitionIdx: index(
+      "leads_status_definition_idx",
+    ).on(
+      table.organizationId,
+      table.statusDefinitionId,
+    ),
+
+    nextActionIdx: index(
+      "leads_next_action_idx",
+    ).on(
+      table.organizationId,
+      table.nextActionAt,
+    ),
+
+    nextActionOwnerIdx: index(
+      "leads_next_action_owner_idx",
+    ).on(
+      table.organizationId,
+      table.nextActionByMembershipId,
+    ),
+
+    lastActivityIdx: index(
+      "leads_last_activity_idx",
+    ).on(
+      table.organizationId,
+      table.lastActivityAt,
     ),
   }),
 );
@@ -717,6 +806,36 @@ export const leadTimelineEvents =
           "event_type",
         ).notNull(),
 
+      /*
+      * Optional structured organization-defined response.
+      *
+      * Example:
+      *
+      * call -> No Answer
+      * viewing -> Offer Requested
+      */
+      responseDefinitionId: uuid(
+        "response_definition_id",
+      ).references(
+        () =>
+          timelineResponseDefinitions.id,
+        {
+          onDelete: "set null",
+        },
+      ),
+
+      /*
+      * Historical snapshots preserve the selected response
+      * even if the organization later renames the definition.
+      */
+      responseKeySnapshot: text(
+        "response_key_snapshot",
+      ),
+
+      responseLabelSnapshot: text(
+        "response_label_snapshot",
+      ),
+
       title: text("title").notNull(),
 
       description: text(
@@ -762,5 +881,12 @@ export const leadTimelineEvents =
       eventTypeIdx: index(
         "lead_timeline_events_type_idx",
       ).on(table.eventType),
+
+      responseDefinitionIdx: index(
+        "lead_timeline_response_definition_idx",
+      ).on(
+        table.organizationId,
+        table.responseDefinitionId,
+      ),
     }),
   );

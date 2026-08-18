@@ -30,7 +30,7 @@ async function start() {
 
     await app.listen({
       port: env.API_PORT,
-      host: "0.0.0.0",
+      host: "127.0.0.1",
     });
 
     app.log.info(
@@ -42,7 +42,7 @@ async function start() {
       "Failed to start AXOS API",
     );
 
-    await database.close();
+    await database.close(); 
 
     process.exit(1);
   }

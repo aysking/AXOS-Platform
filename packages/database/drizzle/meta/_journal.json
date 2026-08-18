@@ -50,6 +50,13 @@
       "when": 1786980312474,
       "tag": "0006_broad_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786991586233,
+      "tag": "0007_dark_leader",
+      "breakpoints": true
     }
   ]
 }

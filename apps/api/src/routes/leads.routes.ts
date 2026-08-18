@@ -19,6 +19,7 @@ import {
   leadIdParamsSchema,
   listLeadsQuerySchema,
   updateLeadSchema,
+  archiveLeadSchema,
 } from "../schemas/lead.schema.js";
 
 import {
@@ -166,4 +167,37 @@ export const leadRoutes:
         };
       },
     );
+
+    app.delete(
+  "/leads/:id",
+  async (
+    request,
+    reply,
+  ) => {
+    const context =
+      getRequestContext(
+        request,
+      );
+
+    const params =
+      leadIdParamsSchema.parse(
+        request.params,
+      );
+
+    const input =
+      archiveLeadSchema.parse(
+        request.body ?? {},
+      );
+
+    await service.archive(
+      context,
+      params.id,
+      input.reason,
+    );
+
+    return reply
+      .code(204)
+      .send();
+  },
+);
   };

@@ -222,3 +222,19 @@ export type UpdateLeadInput =
   z.infer<
     typeof updateLeadSchema
   >;
+
+export const archiveLeadSchema =
+  z.object({
+    reason: z
+      .string()
+      .trim()
+      .min(1)
+      .max(1000)
+      .optional(),
+  })
+  .strict();
+
+export type ArchiveLeadInput =
+  z.infer<
+    typeof archiveLeadSchema
+  >;

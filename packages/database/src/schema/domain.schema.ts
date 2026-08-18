@@ -120,6 +120,20 @@ export const leads = pgTable(
     closedAt: timestamp("closed_at", {
       withTimezone: true,
     }),
+
+    archivedAt: timestamp("archived_at", {
+    withTimezone: true,
+    }),
+
+    archivedByMembershipId: uuid(
+      "archived_by_membership_id",
+    ).references(() => memberships.id, {
+      onDelete: "set null",
+    }),
+
+    archiveReason: text(
+      "archive_reason",
+    ),
   },
   (table) => ({
     organizationIdx: index(
@@ -145,6 +159,13 @@ export const leads = pgTable(
     createdAtIdx: index(
       "leads_created_at_idx",
     ).on(table.createdAt),
+
+    archivedIdx: index(
+      "leads_archived_idx",
+    ).on(
+      table.organizationId,
+      table.archivedAt,
+    ),
   }),
 );
 
@@ -652,6 +673,7 @@ export const leadTimelineEventType =
       "offer_created",
       "offer_updated",
       "custom",
+      "archived",
     ],
   );
 

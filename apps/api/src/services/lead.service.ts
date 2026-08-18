@@ -215,4 +215,43 @@ export class LeadService {
       },
     };
   }
+  async archive(
+  context:
+    AxosRequestContext,
+  leadId: string,
+  reason?: string,
+) {
+  const existing =
+    await this.repository.findById(
+      context.organizationId,
+      leadId,
+    );
+
+  if (!existing) {
+    throw new NotFoundError(
+      "Lead not found",
+    );
+  }
+
+  const archived =
+    await this.repository.archive(
+      {
+        organizationId:
+          context.organizationId,
+
+        membershipId:
+          context.membershipId,
+      },
+      leadId,
+      reason,
+    );
+
+  if (!archived) {
+    throw new ConflictError(
+      "Lead could not be archived",
+    );
+  }
+
+  return archived;
+}
 }

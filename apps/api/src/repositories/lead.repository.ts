@@ -7,6 +7,7 @@ import {
 import {
   and,
   eq,
+  isNull,
 } from "drizzle-orm";
 
 import type {
@@ -25,6 +26,85 @@ export class LeadRepository {
     private readonly database:
       DatabaseConnection,
   ) {}
+
+
+  async archive(
+  context: CreateLeadContext,
+  leadId: string,
+  reason?: string,
+) {
+  return this.database.db.transaction(
+    async (tx) => {
+      const now = new Date();
+
+      const [archivedLead] =
+        await tx
+          .update(leads)
+          .set({
+            archivedAt: now,
+
+            archivedByMembershipId:
+              context.membershipId,
+
+            archiveReason:
+              reason ?? null,
+
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(
+                leads.id,
+                leadId,
+              ),
+              eq(
+                leads.organizationId,
+                context.organizationId,
+              ),
+              isNull(
+                leads.archivedAt,
+              ),
+            ),
+          )
+          .returning();
+
+      if (!archivedLead) {
+        return null;
+      }
+
+      await tx
+        .insert(
+          leadTimelineEvents,
+        )
+        .values({
+          organizationId:
+            context.organizationId,
+
+          leadId:
+            archivedLead.id,
+
+          createdByMembershipId:
+            context.membershipId,
+
+          eventType:
+            "archived",
+
+          title:
+            "Lead archived",
+
+          description:
+            reason ?? null,
+
+          metadata: {
+            previousStatus:
+              archivedLead.status,
+          },
+        });
+
+      return archivedLead;
+    },
+  );
+}
 
   async update(
   context: CreateLeadContext,
@@ -375,6 +455,9 @@ export class LeadRepository {
               table.organizationId,
               organizationId,
             ),
+            isNull(
+              table.archivedAt,
+            ),
           ),
       });
   }
@@ -393,6 +476,10 @@ export class LeadRepository {
             eq(
               table.organizationId,
               organizationId,
+            ),
+
+            isNull(
+              table.archivedAt,
             ),
 
             query.status

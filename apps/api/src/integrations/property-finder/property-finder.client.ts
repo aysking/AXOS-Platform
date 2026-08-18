@@ -4,6 +4,7 @@ import {
 
 import type {
   PropertyFinderAuthResponse,
+  PropertyFinderLeadSearchResponse,
   PropertyFinderListingSearchResponse,
 } from "./property-finder.types.js";
 
@@ -317,6 +318,69 @@ export class PropertyFinderClient {
       PropertyFinderListingSearchResponse
     >(
       `/v1/listings?${params.toString()}`,
+    );
+  }
+
+  async searchLeads(
+    options: {
+      page?: number;
+      perPage?: number;
+      createdAtFrom?: Date;
+      createdAtTo?: Date;
+    } = {},
+  ) {
+    const page =
+      options.page ?? 1;
+
+    const perPage =
+      options.perPage ?? 50;
+
+    if (
+      perPage < 1 ||
+      perPage > 50
+    ) {
+      throw new Error(
+        "Property Finder lead perPage must be between 1 and 50",
+      );
+    }
+
+    const params =
+      new URLSearchParams();
+
+    params.set(
+      "page",
+      String(page),
+    );
+
+    params.set(
+      "perPage",
+      String(perPage),
+    );
+
+    if (
+      options.createdAtFrom
+    ) {
+      params.set(
+        "createdAtFrom",
+        options.createdAtFrom
+          .toISOString(),
+      );
+    }
+
+    if (
+      options.createdAtTo
+    ) {
+      params.set(
+        "createdAtTo",
+        options.createdAtTo
+          .toISOString(),
+      );
+    }
+
+    return this.authorizedGet<
+      PropertyFinderLeadSearchResponse
+    >(
+      `/v1/leads?${params.toString()}`,
     );
   }
 }

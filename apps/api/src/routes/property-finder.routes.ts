@@ -26,6 +26,14 @@ import {
   PropertyFinderListingSyncService,
 } from "../services/property-finder-listing-sync.service.js";
 
+import {
+  PropertyFinderLeadRepository,
+} from "../repositories/property-finder-lead.repository.js";
+
+import {
+  PropertyFinderLeadSyncService,
+} from "../services/property-finder-lead-sync.service.js";
+
 export interface PropertyFinderRouteOptions {
   database:
     DatabaseConnection;
@@ -64,6 +72,17 @@ export const propertyFinderRoutes:
       new PropertyFinderListingSyncService(
         client,
         repository,
+      );
+
+    const leadRepository =
+      new PropertyFinderLeadRepository(
+        options.database,
+      );
+
+    const leadSyncService =
+      new PropertyFinderLeadSyncService(
+        client,
+        leadRepository,
       );
 
     /*
@@ -196,4 +215,147 @@ export const propertyFinderRoutes:
           }
         },
       );
+
+  app.post<{
+    Querystring: {
+      lookbackDays?: string;
+    };
+  }>(
+    "/integrations/property-finder/leads/sync",
+    async (
+      request,
+    ) => {
+      const context =
+        getRequestContext(
+          request,
+        );
+
+      const requestedLookback =
+        request.query
+          .lookbackDays;
+
+      const lookbackDays =
+        requestedLookback
+          ? Number(
+              requestedLookback,
+            )
+          : 30;
+
+      if (
+        !Number.isInteger(
+          lookbackDays,
+        ) ||
+        lookbackDays < 1 ||
+        lookbackDays > 89
+      ) {
+        throw new AppError(
+          "lookbackDays must be an integer between 1 and 89",
+          {
+            statusCode: 400,
+
+            code:
+              "INVALID_PROPERTY_FINDER_LOOKBACK",
+          },
+        );
+      }
+
+      try {
+        request.log.info(
+          {
+            organizationId:
+              context.organizationId,
+
+            lookbackDays,
+          },
+          "Starting Property Finder Lead sync",
+        );
+
+        const result =
+          await leadSyncService
+            .sync(
+              context.organizationId,
+              {
+                lookbackDays,
+              },
+            );
+
+        request.log.info(
+          {
+            organizationId:
+              context.organizationId,
+
+            leadsFetched:
+              result.leadsFetched,
+
+            inquiriesCreated:
+              result.inquiriesCreated,
+
+            axosLeadsCreated:
+              result.axosLeadsCreated,
+
+            axosLeadsReused:
+              result.axosLeadsReused,
+          },
+          "Property Finder Lead sync completed",
+        );
+
+        return {
+          data:
+            result,
+        };
+      } catch (error) {
+        if (
+          error instanceof
+          AppError
+        ) {
+          request.log.error(
+            {
+              code:
+                error.code,
+
+              message:
+                error.message,
+
+              details:
+                error.details,
+            },
+            "Property Finder Lead sync failed",
+          );
+
+          throw error;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
+        const name =
+          error instanceof Error
+            ? error.name
+            : "UnknownError";
+
+        request.log.error(
+          error,
+          "Unexpected Property Finder Lead sync failure",
+        );
+
+        throw new AppError(
+          "Property Finder Lead sync failed",
+          {
+            statusCode:
+              502,
+
+            code:
+              "PROPERTY_FINDER_LEAD_SYNC_FAILED",
+
+            details: {
+              name,
+              message,
+            },
+          },
+        );
+      }
+    },
+  );
 };

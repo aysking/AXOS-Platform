@@ -156,3 +156,128 @@ export interface PropertyFinderListingSearchResponse {
 
   pagination?: PropertyFinderPagination;
 }
+
+/*
+ * ============================================================
+ * PROPERTY FINDER LEADS
+ * ============================================================
+ */
+
+export interface PropertyFinderLeadContact {
+  type: string;
+  value: string;
+}
+
+export interface PropertyFinderLead {
+  id: string;
+
+  entityType?:
+    | "listing"
+    | "project"
+    | "developer"
+    | "agent"
+    | "company"
+    | string
+    | null;
+
+  channel?:
+    | "whatsapp"
+    | "email"
+    | "call"
+    | string
+    | null;
+
+  status?:
+    | "sent"
+    | "delivered"
+    | "read"
+    | "replied"
+    | string
+    | null;
+
+  enrichment?:
+    Record<string, unknown>
+    | null;
+
+  distributionType?:
+    string
+    | null;
+
+  publicProfile?: {
+    id?:
+      string
+      | number
+      | null;
+  } | null;
+
+  sender?: {
+    name?:
+      string
+      | null;
+
+    contacts?:
+      PropertyFinderLeadContact[]
+      | null;
+  } | null;
+
+  responseLink?:
+    string
+    | null;
+
+  listing?: {
+    id?:
+      string
+      | null;
+
+    reference?:
+      string
+      | null;
+  } | null;
+
+  project?: {
+    id?:
+      string
+      | null;
+  } | null;
+
+  developer?: {
+    id?:
+      string
+      | null;
+  } | null;
+
+  call?: {
+    talkTime?:
+      number
+      | null;
+
+    waitTime?:
+      number
+      | null;
+
+    recordFile?:
+      string
+      | null;
+  } | null;
+
+  tags?:
+    string[]
+    | null;
+
+  createdAt?:
+    string
+    | null;
+
+  /*
+   * Preserve future PF fields.
+   */
+  [key: string]: unknown;
+}
+
+export interface PropertyFinderLeadSearchResponse {
+  data:
+    PropertyFinderLead[];
+
+  pagination?:
+    PropertyFinderPagination;
+}

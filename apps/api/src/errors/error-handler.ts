@@ -45,6 +45,58 @@ export function registerErrorHandler(
           });
       }
 
+      /*
+      * Preserve Fastify HTTP errors such as:
+      *
+      * 400 Bad Request
+      * 404 Not Found
+      * 415 Unsupported Media Type
+      *
+      * Fastify errors expose a statusCode even though
+      * they are not AXOS AppError instances.
+      */
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "statusCode" in error &&
+        typeof error.statusCode === "number"
+      ) {
+        request.log.warn(
+          {
+            statusCode:
+              error.statusCode,
+
+            code:
+              "code" in error
+                ? error.code
+                : undefined,
+
+            message:
+              error instanceof Error
+                ? error.message
+                : "Request error",
+          },
+          "Fastify request error",
+        );
+
+        return reply
+          .code(error.statusCode)
+          .send({
+            error: {
+              code:
+                "code" in error &&
+                typeof error.code === "string"
+                  ? error.code
+                  : "REQUEST_ERROR",
+
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Request error",
+            },
+          });
+      }
+
       request.log.error(
         error,
         "Unhandled application error",

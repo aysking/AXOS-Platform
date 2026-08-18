@@ -74,6 +74,25 @@ const envSchema = z.object({
   .string()
   .uuid()
   .optional(),
+
+  PROPERTY_FINDER_BASE_URL: z
+  .string()
+  .url()
+  .default(
+    "https://atlas.propertyfinder.com",
+  ),
+
+  PROPERTY_FINDER_API_KEY: z
+    .string()
+    .trim()
+    .min(1)
+    .optional(),
+
+  PROPERTY_FINDER_API_SECRET: z
+    .string()
+    .trim()
+    .min(1)
+    .optional(),
   
 });
 

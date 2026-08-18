@@ -20,6 +20,10 @@ import {
   leadRoutes,
 } from "./routes/leads.routes.js";
 
+import {
+  propertyFinderRoutes,
+} from "./routes/property-finder.routes.js";
+
 export interface BuildAppOptions {
   database:
     DatabaseConnection;
@@ -96,6 +100,8 @@ export async function buildApp(
   /*
    * Protected AXOS API.
    */
+
+  
   await app.register(
     async (api) => {
       registerRequestContext(
@@ -109,6 +115,14 @@ export async function buildApp(
           database,
         },
       );
+
+      await api.register(
+        propertyFinderRoutes,
+        {
+          database,
+        },
+      );
+
     },
     {
       prefix: "/api",

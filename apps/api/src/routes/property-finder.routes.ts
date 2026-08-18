@@ -34,6 +34,10 @@ import {
   PropertyFinderLeadSyncService,
 } from "../services/property-finder-lead-sync.service.js";
 
+import {
+  PropertyFinderWebhookSubscriptionService,
+} from "../services/property-finder-webhook-subscription.service.js";
+
 export interface PropertyFinderRouteOptions {
   database:
     DatabaseConnection;
@@ -85,6 +89,11 @@ export const propertyFinderRoutes:
         leadRepository,
       );
 
+    const webhookSubscriptionService =
+    new PropertyFinderWebhookSubscriptionService(
+      client,
+    );
+
     /*
      * Safe diagnostic endpoint.
      *
@@ -112,109 +121,154 @@ export const propertyFinderRoutes:
      * can call the same service.
      */
     app.post(
-        "/integrations/property-finder/listings/sync",
-        async (
-          request,
-        ) => {
-          const context =
-            getRequestContext(
+            "/integrations/property-finder/listings/sync",
+            async (
               request,
-            );
+            ) => {
+              const context =
+                getRequestContext(
+                  request,
+                );
 
-          try {
-            request.log.info(
-              {
-                organizationId:
-                  context.organizationId,
-              },
-              "Starting Property Finder listing sync",
-            );
+              try {
+                request.log.info(
+                  {
+                    organizationId:
+                      context.organizationId,
+                  },
+                  "Starting Property Finder listing sync",
+                );
 
-            const result =
-              await syncService.sync(
+                const result =
+                  await syncService.sync(
+                    context.organizationId,
+                  );
+
+                request.log.info(
+                  {
+                    organizationId:
+                      context.organizationId,
+
+                    listingsProcessed:
+                      result.listingsProcessed,
+
+                    listingsDeactivated:
+                      result.listingsDeactivated,
+                  },
+                  "Property Finder listing sync completed",
+                );
+
+                return {
+                  data: result,
+                };
+              } catch (error) {
+                /*
+                * Preserve errors already intentionally created
+                * by the Property Finder client.
+                */
+                if (
+                  error instanceof AppError
+                ) {
+                  request.log.error(
+                    {
+                      code:
+                        error.code,
+
+                      message:
+                        error.message,
+
+                      details:
+                        error.details,
+                    },
+                    "Property Finder listing sync failed",
+                  );
+
+                  throw error;
+                }
+
+                /*
+                * Convert unexpected mapper/database/runtime failures
+                * into a diagnostic AppError.
+                *
+                * Credentials are never included here.
+                */
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : String(error);
+
+                const name =
+                  error instanceof Error
+                    ? error.name
+                    : "UnknownError";
+
+                request.log.error(
+                  error,
+                  "Unexpected Property Finder listing sync failure",
+                );
+
+                throw new AppError(
+                  "Property Finder listing sync failed",
+                  {
+                    statusCode: 502,
+
+                    code:
+                      "PROPERTY_FINDER_SYNC_FAILED",
+
+                    details: {
+                      name,
+                      message,
+                    },
+                  },
+                );
+              }
+            },
+          );
+      app.post(
+      "/integrations/property-finder/webhooks/subscribe",
+      async (
+        request,
+      ) => {
+        const context =
+          getRequestContext(
+            request,
+          );
+
+        const publicBaseUrl =
+          env
+            .PROPERTY_FINDER_PUBLIC_BASE_URL;
+
+        const webhookSecretSeed =
+          env
+            .PROPERTY_FINDER_WEBHOOK_SECRET_SEED;
+
+        if (
+          !publicBaseUrl ||
+          !webhookSecretSeed
+        ) {
+          throw new AppError(
+            "Property Finder webhook subscription is not configured",
+            {
+              statusCode:
+                503,
+
+              code:
+                "PROPERTY_FINDER_WEBHOOK_SUBSCRIPTION_NOT_CONFIGURED",
+            },
+          );
+        }
+
+        return {
+          data:
+            await webhookSubscriptionService
+              .ensureLeadSubscriptions(
                 context.organizationId,
-              );
-
-            request.log.info(
-              {
-                organizationId:
-                  context.organizationId,
-
-                listingsProcessed:
-                  result.listingsProcessed,
-
-                listingsDeactivated:
-                  result.listingsDeactivated,
-              },
-              "Property Finder listing sync completed",
-            );
-
-            return {
-              data: result,
-            };
-          } catch (error) {
-            /*
-            * Preserve errors already intentionally created
-            * by the Property Finder client.
-            */
-            if (
-              error instanceof AppError
-            ) {
-              request.log.error(
-                {
-                  code:
-                    error.code,
-
-                  message:
-                    error.message,
-
-                  details:
-                    error.details,
-                },
-                "Property Finder listing sync failed",
-              );
-
-              throw error;
-            }
-
-            /*
-            * Convert unexpected mapper/database/runtime failures
-            * into a diagnostic AppError.
-            *
-            * Credentials are never included here.
-            */
-            const message =
-              error instanceof Error
-                ? error.message
-                : String(error);
-
-            const name =
-              error instanceof Error
-                ? error.name
-                : "UnknownError";
-
-            request.log.error(
-              error,
-              "Unexpected Property Finder listing sync failure",
-            );
-
-            throw new AppError(
-              "Property Finder listing sync failed",
-              {
-                statusCode: 502,
-
-                code:
-                  "PROPERTY_FINDER_SYNC_FAILED",
-
-                details: {
-                  name,
-                  message,
-                },
-              },
-            );
-          }
-        },
-      );
+                publicBaseUrl,
+                webhookSecretSeed,
+              ),
+        };
+      },
+    );
 
   app.post<{
     Querystring: {

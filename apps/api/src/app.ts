@@ -24,6 +24,12 @@ import {
   propertyFinderRoutes,
 } from "./routes/property-finder.routes.js";
 
+import rawBody from "fastify-raw-body";
+
+import {
+  propertyFinderWebhookRoutes,
+} from "./routes/property-finder-webhook.routes.js";
+
 export interface BuildAppOptions {
   database:
     DatabaseConnection;
@@ -45,6 +51,30 @@ export async function buildApp(
   await app.register(cors, {
     origin: true,
   });
+
+  /*
+  * Raw request body is needed for external
+  * webhook HMAC verification.
+  *
+  * global:false means normal AXOS API requests
+  * do not incur this overhead.
+  */
+  await app.register(
+    rawBody,
+    {
+      field:
+        "rawBody",
+
+      global:
+        false,
+
+      encoding:
+        "utf8",
+
+      runFirst:
+        true,
+    },
+  );
 
   app.get(
     "/health",
@@ -94,6 +124,19 @@ export async function buildApp(
               "axos-database",
           });
       }
+    },
+  );
+
+  /*
+  * External server-to-server webhooks.
+  *
+  * These routes deliberately do NOT use the
+  * authenticated AXOS membership context.
+  */
+  await app.register(
+    propertyFinderWebhookRoutes,
+    {
+      database,
     },
   );
 

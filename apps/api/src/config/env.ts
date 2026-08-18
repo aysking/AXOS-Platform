@@ -93,7 +93,16 @@ const envSchema = z.object({
     .trim()
     .min(1)
     .optional(),
-  
+
+  PROPERTY_FINDER_PUBLIC_BASE_URL: z
+  .string()
+  .url()
+  .optional(),
+
+  PROPERTY_FINDER_WEBHOOK_SECRET_SEED: z
+    .string()
+    .min(32)
+    .optional(),
 });
 
 const result = envSchema.safeParse(
@@ -115,4 +124,5 @@ if (!result.success) {
 }
 
 export const env = result.data;
+
 

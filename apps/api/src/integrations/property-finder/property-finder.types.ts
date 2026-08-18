@@ -281,3 +281,153 @@ export interface PropertyFinderLeadSearchResponse {
   pagination?:
     PropertyFinderPagination;
 }
+
+/*
+ * ============================================================
+ * PROPERTY FINDER WEBHOOKS
+ * ============================================================
+ */
+
+export type PropertyFinderLeadWebhookEventType =
+  | "lead.created"
+  | "lead.updated"
+  | "lead.assigned";
+
+export interface PropertyFinderLeadWebhookPayload {
+  channel?:
+    string | null;
+
+  status?:
+    string | null;
+
+  entityType?:
+    string | null;
+
+  distributionType?:
+    string | null;
+
+  enrichment?:
+    Record<string, unknown>
+    | null;
+
+  publicProfile?: {
+    id?:
+      string
+      | number
+      | null;
+  } | null;
+
+  sender?: {
+    name?:
+      string
+      | null;
+
+    contacts?:
+      PropertyFinderLeadContact[]
+      | null;
+  } | null;
+
+  responseLink?:
+    string
+    | null;
+
+  listing?: {
+    id?:
+      string
+      | null;
+
+    reference?:
+      string
+      | null;
+  } | null;
+
+  project?: {
+    id?:
+      string
+      | null;
+  } | null;
+
+  developer?: {
+    id?:
+      string
+      | null;
+  } | null;
+
+  call?: {
+    talkTime?:
+      number
+      | null;
+
+    waitTime?:
+      number
+      | null;
+
+    recordFile?:
+      string
+      | null;
+  } | null;
+
+  tags?:
+    string[]
+    | null;
+}
+
+export interface PropertyFinderLeadWebhookEvent {
+  id: string;
+
+  type:
+    PropertyFinderLeadWebhookEventType;
+
+  timestamp: string;
+
+  entity: {
+    id: string;
+    type: string;
+  };
+
+  payload:
+    PropertyFinderLeadWebhookPayload;
+}
+
+export interface PropertyFinderWebhookSubscription {
+  eventId: string;
+
+  callbackUrl?:
+    string | null;
+
+  /*
+   * Keep this temporarily for compatibility
+   * in case PF returns the older/alternate field.
+   */
+  url?:
+    string | null;
+
+  createdAt?:
+    string | null;
+}
+
+export interface PropertyFinderWebhookListResponse {
+  data:
+    PropertyFinderWebhookSubscription[];
+}
+
+export type PropertyFinderListingWebhookEventType =
+  | "listing.published"
+  | "listing.unpublished";
+
+export interface PropertyFinderListingWebhookEvent {
+  id: string;
+
+  type:
+    PropertyFinderListingWebhookEventType;
+
+  timestamp: string;
+
+  entity: {
+    id: string;
+    type: "listing";
+  };
+
+  payload:
+    Record<string, never>;
+}

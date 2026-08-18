@@ -6,6 +6,9 @@ import type {
   PropertyFinderAuthResponse,
   PropertyFinderLeadSearchResponse,
   PropertyFinderListingSearchResponse,
+  PropertyFinderWebhookListResponse,
+  PropertyFinderWebhookSubscription,
+  PropertyFinderLeadWebhookEventType,
 } from "./property-finder.types.js";
 
 export interface PropertyFinderClientConfig {
@@ -50,6 +53,112 @@ export class PropertyFinderClient {
   private getBaseUrl() {
     return this.config.baseUrl
       .replace(/\/+$/, "");
+  }
+
+  private async authorizedPost<T>(
+      path: string,
+      body: unknown,
+      retryAuthentication = true,
+    ): Promise<T> {
+      const token =
+        await this.getAccessToken();
+
+      const response =
+        await this.request(
+          `${this.getBaseUrl()}${path}`,
+          {
+            method:
+              "POST",
+
+            headers: {
+              Accept:
+                "application/json",
+
+              Authorization:
+                `Bearer ${token}`,
+
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                body,
+              ),
+          },
+        );
+
+      if (
+        response.status === 401 &&
+        retryAuthentication
+      ) {
+        this.invalidateAccessToken();
+
+        return this
+          .authorizedPost<T>(
+            path,
+            body,
+            false,
+          );
+      }
+
+      if (!response.ok) {
+        const upstreamBody =
+          await this
+            .readErrorBody(
+              response,
+            );
+
+        throw new AppError(
+          "Property Finder API request failed",
+          {
+            statusCode:
+              502,
+
+            code:
+              "PROPERTY_FINDER_API_ERROR",
+
+            details: {
+              upstreamStatus:
+                response.status,
+
+              upstreamBody,
+
+              path,
+            },
+          },
+        );
+      }
+
+      return (
+        await response.json()
+      ) as T;
+    }
+
+    async listWebhookSubscriptions() {
+    return this.authorizedGet<
+      PropertyFinderWebhookListResponse
+    >(
+      "/v1/webhooks",
+    );
+  }
+
+  async subscribeWebhook(
+    eventId:
+      PropertyFinderLeadWebhookEventType,
+    callbackUrl: string,
+    secret: string,
+  ) {
+    return this.authorizedPost<
+      PropertyFinderWebhookSubscription
+    >(
+      "/v1/webhooks",
+      {
+        eventId,
+        callbackUrl,
+        secret,
+      },
+    );
   }
 
   private async issueAccessToken() {
@@ -383,4 +492,63 @@ export class PropertyFinderClient {
       `/v1/leads?${params.toString()}`,
     );
   }
+
+  async searchListingsByIds(
+    ids: string[],
+  ) {
+    if (ids.length === 0) {
+      return {
+        results: [],
+      } satisfies PropertyFinderListingSearchResponse;
+    }
+
+    if (ids.length > 100) {
+      throw new Error(
+        "Property Finder listing ID lookup supports a maximum of 100 IDs",
+      );
+    }
+
+    const params =
+      new URLSearchParams();
+
+    params.set(
+      "filter[ids]",
+      ids.join(","),
+    );
+
+    params.set(
+      "page",
+      "1",
+    );
+
+    params.set(
+      "perPage",
+      String(ids.length),
+    );
+
+    return this.authorizedGet<
+      PropertyFinderListingSearchResponse
+    >(
+      `/v1/listings?${params.toString()}`,
+    );
+  }
+
+  async getListingById(
+    externalId: string,
+  ) {
+    const response =
+      await this.searchListingsByIds([
+        externalId,
+      ]);
+
+    return (
+      response.results.find(
+        (listing) =>
+          String(listing.id) ===
+          externalId,
+      ) ??
+      null
+    );
+  }
+
 }

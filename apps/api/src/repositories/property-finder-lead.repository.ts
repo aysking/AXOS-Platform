@@ -279,65 +279,110 @@ export class PropertyFinderLeadRepository {
                 ),
               );
 
-            if (listing) {
-              await tx
-                .insert(
-                  leadListings,
-                )
-                .values({
-                  organizationId,
+              if (listing) {
+                await tx
+                  .insert(
+                    leadListings,
+                  )
+                  .values({
+                    organizationId,
 
-                  leadId:
-                    existingInquiry.leadId,
+                    leadId:
+                      existingInquiry.leadId,
 
-                  listingId:
-                    listing.id,
+                    listingId:
+                      listing.id,
 
-                  linkSource:
-                    "inquiry",
+                    linkSource:
+                      "inquiry",
 
-                  lastLinkedAt:
-                    now,
-                })
-                .onConflictDoUpdate({
-                  target: [
-                    leadListings.organizationId,
-                    leadListings.leadId,
-                    leadListings.listingId,
-                  ],
-
-                  set: {
                     lastLinkedAt:
                       now,
-                  },
-                });
-            }
+                  })
+                  .onConflictDoUpdate({
+                    target: [
+                      leadListings.organizationId,
+                      leadListings.leadId,
+                      leadListings.listingId,
+                    ],
 
-            return {
-              externalInquiryId:
-                input.externalInquiryId,
+                    set: {
+                      lastLinkedAt:
+                        now,
+                    },
+                  });
+              }
 
-              inquiryCreated:
-                false,
+              /*
+              * Existing inquiry may be refreshed by polling
+              * or another provider delivery.
+              *
+              * Never let Lead last_activity_at move backwards.
+              */
+              const providerCreatedAt =
+                input.providerCreatedAt;
 
-              inquiryUpdated:
-                true,
+              if (providerCreatedAt) {
+                const providerActivityAt =
+                  providerCreatedAt
+                    .toISOString();
 
-              leadId:
-                existingInquiry.leadId,
+                await tx
+                  .update(leads)
+                  .set({
+                    lastActivityAt:
+                      sql`GREATEST(
+                        ${leads.lastActivityAt},
+                        ${providerActivityAt}::timestamptz
+                      )`,
 
-              leadCreated:
-                false,
+                    updatedAt:
+                      now,
+                  })
+                  .where(
+                    and(
+                      eq(
+                        leads.id,
+                        existingInquiry.leadId,
+                      ),
 
-              leadMatched:
-                false,
+                      eq(
+                        leads.organizationId,
+                        organizationId,
+                      ),
+                    ),
+                  );
+              }
 
-              ambiguousMatch:
-                false,
+              /*
+              * This return must NOT be inside
+              * if (input.providerCreatedAt).
+              */
+              return {
+                externalInquiryId:
+                  input.externalInquiryId,
 
-              listingId:
-                resolvedListingId,
-            };
+                inquiryCreated:
+                  false,
+
+                inquiryUpdated:
+                  true,
+
+                leadId:
+                  existingInquiry.leadId,
+
+                leadCreated:
+                  false,
+
+                leadMatched:
+                  false,
+
+                ambiguousMatch:
+                  false,
+
+                listingId:
+                  resolvedListingId,
+              };
           }
 
           /*
@@ -933,10 +978,6 @@ export class PropertyFinderLeadRepository {
 
               leadId,
 
-              /*
-               * External system event.
-               * No human membership owns creation.
-               */
               createdByMembershipId:
                 null,
 
@@ -977,52 +1018,8 @@ export class PropertyFinderLeadRepository {
             });
 
           /*
-          * --------------------------------------------------
-          * EXISTING INQUIRY LAST ACTIVITY
-          * --------------------------------------------------
-          *
-          * An existing inquiry may be refreshed by polling
-          * after first arriving through a webhook.
-          *
-          * If Property Finder supplies a newer authoritative
-          * activity timestamp, never leave the AXOS Lead's
-          * last_activity_at behind it.
+          * New inquiry result.
           */
-
-          if (
-            input.providerCreatedAt
-          ) {
-            const providerActivityAt =
-              input.providerCreatedAt
-                .toISOString();
-
-            await tx
-              .update(leads)
-              .set({
-                lastActivityAt:
-                  sql`GREATEST(
-                    ${leads.lastActivityAt},
-                    ${providerActivityAt}::timestamptz
-                  )`,
-
-                updatedAt:
-                  now,
-              })
-              .where(
-                and(
-                  eq(
-                    leads.id,
-                    existingInquiry.leadId,
-                  ),
-
-                  eq(
-                    leads.organizationId,
-                    organizationId,
-                  ),
-                ),
-              );
-          }
-
           return {
             externalInquiryId:
               input.externalInquiryId,
@@ -1046,6 +1043,6 @@ export class PropertyFinderLeadRepository {
               null,
           };
         },
-      );
+    );
   }
 }

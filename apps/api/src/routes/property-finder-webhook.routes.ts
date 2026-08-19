@@ -580,6 +580,23 @@ export const propertyFinderWebhookRoutes:
             );
 
           /*
+          * Ensure the referenced Listing exists locally
+          * before importing/linking the Lead.
+          */
+
+          if (
+              mapped.externalListingId ||
+              mapped.externalListingReference
+            ) {
+              await listingResolver
+                .resolveForLead(
+                  organizationId,
+                  mapped.externalListingId,
+                  mapped.externalListingReference,
+                );
+            }
+
+          /*
            * KEEP YOUR EXISTING
            * listingResolver.resolve(...)
            * call here.
